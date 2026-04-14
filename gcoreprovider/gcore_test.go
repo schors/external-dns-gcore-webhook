@@ -378,6 +378,40 @@ func Test_dnsProvider_ApplyChanges(t *testing.T) {
 			wantErr: false,
 		},
 		{
+			name: "create TXT ok",
+			fields: fields{
+				domainFilter: endpoint.DomainFilter{},
+				client: dnsManagerMock{
+					zonesWithRecords: func(ctx context.Context,
+						filters []string) ([]gdns.Zone, error) {
+						return []gdns.Zone{{Name: "test.com"}}, nil
+					},
+					addZoneRRSet: func(ctx context.Context, zone, recordName, recordType string, values []gdns.ResourceRecord, ttl int) error {
+						if zone == "test.com" &&
+							ttl == 10 &&
+							recordName == "my.test.com" &&
+							recordType == "TXT" &&
+							values[0].Content[0] == "\"heritage=external-dns,external-dns/owner=default\"" {
+							return nil
+						}
+						return fmt.Errorf("addZoneRRSet wrong params: zone=%s name=%s type=%s values=%+v ttl=%d",
+							zone, recordName, recordType, values, ttl)
+					},
+				},
+				dryRun: false,
+			},
+			args: args{
+				ctx: context.Background(),
+				changes: &plan.Changes{
+					Create: []*endpoint.Endpoint{
+						endpoint.NewEndpointWithTTL("my.test.com", "TXT", 10,
+							"\"heritage=external-dns,external-dns/owner=default\""),
+					},
+				},
+			},
+			wantErr: false,
+		},
+		{
 			name: "update ok",
 			fields: fields{
 				domainFilter: endpoint.DomainFilter{},
@@ -431,6 +465,57 @@ func Test_dnsProvider_ApplyChanges(t *testing.T) {
 			}
 			if err := p.ApplyChanges(tt.args.ctx, tt.args.changes); (err != nil) != tt.wantErr {
 				t.Errorf("ApplyChanges() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func Test_dnsProvider_AdjustEndpoints(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []*endpoint.Endpoint
+		want []*endpoint.Endpoint
+	}{
+		{
+			name: "mixed types preserved",
+			in: []*endpoint.Endpoint{
+				endpoint.NewEndpointWithTTL("my.test.com", "A", 10, "1.1.1.1"),
+				endpoint.NewEndpointWithTTL("my.test.com", "TXT", 10,
+					"\"heritage=external-dns,external-dns/owner=default\""),
+			},
+			want: []*endpoint.Endpoint{
+				endpoint.NewEndpointWithTTL("my.test.com", "A", 10, "1.1.1.1"),
+				endpoint.NewEndpointWithTTL("my.test.com", "TXT", 10,
+					"\"heritage=external-dns,external-dns/owner=default\""),
+			},
+		},
+		{
+			name: "txt only",
+			in: []*endpoint.Endpoint{
+				endpoint.NewEndpointWithTTL("my.test.com", "TXT", 10,
+					"\"heritage=external-dns,external-dns/owner=default\""),
+			},
+			want: []*endpoint.Endpoint{
+				endpoint.NewEndpointWithTTL("my.test.com", "TXT", 10,
+					"\"heritage=external-dns,external-dns/owner=default\""),
+			},
+		},
+		{
+			name: "empty",
+			in:   []*endpoint.Endpoint{},
+			want: []*endpoint.Endpoint{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := &DnsProvider{}
+			got, err := p.AdjustEndpoints(tt.in)
+			if err != nil {
+				t.Errorf("AdjustEndpoints() error = %v", err)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("AdjustEndpoints() got = %v, want %v", got, tt.want)
 			}
 		})
 	}

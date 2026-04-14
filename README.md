@@ -7,7 +7,20 @@ ExternalDNS is a Kubernetes add-on for automatically managing Domain Name System
 
 To use ExternalDNS with Gcore you need to get API token from https://accounts.gcore.com/profile/api-tokens.
 
-Note as per `v0.1.0` TXT record will no longer be created as workaround for wildcard record.
+As of `v0.1.7`, the webhook no longer skips TXT records and handles them normally.
+For wildcard hosts, use the `--txt-wildcard-replacement` option on the `external-dns` container:
+
+```yaml
+      containers:
+        - name: external-dns
+          image: registry.k8s.io/external-dns/external-dns:v0.20.0
+          args:
+            - --source=service
+            - --source=ingress
+            - --provider=webhook
+            - --txt-owner-id=my-owner
+            - --txt-wildcard-replacement=wildcard
+```
 
 ## Deployment in kubernetes:
 

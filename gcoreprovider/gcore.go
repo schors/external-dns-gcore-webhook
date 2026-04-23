@@ -111,8 +111,8 @@ func (p *DnsProvider) Records(rootCtx context.Context) ([]*endpoint.Endpoint, er
 				skipped++
 				continue
 			}
-			for i, answer := range r.ShortAnswers {
-				if r.Type == endpoint.RecordTypeTXT {
+			if r.Type == endpoint.RecordTypeTXT {
+				for i, answer := range r.ShortAnswers {
 					r.ShortAnswers[i] = escapeOwnershipTXTRecordValue(answer)
 				}
 			}
